@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
 function App() {
@@ -8,23 +8,32 @@ function App() {
   const [imageSrc, setImageSrc] = useState("top.png");
   const [points, setPoints] = useState(0);
   const [borderColor, setBorderColor] = useState("blue");
-  const [inputReceived, setInputReceived] = useState(false); // 入力が受け付けられたかどうか
+  const [inputReceived, setInputReceived] = useState(false);
+  const [selectedSize, setSelectedSize] = useState(100); // 視力検査のサイズ選択
+  const [backgroundChanged, setBackgroundChanged] = useState(false); // 背景変更トリガー
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   const handleStart = () => {
     setIsStarted(true);
+    if (audioRef.current) {
+      audioRef.current.volume = 0.7;
+      audioRef.current.play();
+    }
   };
 
   useEffect(() => {
     if (isStarted) {
-      const timings = [1000, 5000, 15000]; // 1秒、5秒、15秒
+      const timings = [
+        1200, 4400, 8800, 12000, 16800, 22400, 27200, 31200, 34000, 38000,
+        42000, 46800, 49200,
+      ];
       const images = ["top.png", "bottom.png", "right.png", "left.png"];
       const timeouts: Array<number> = [];
 
       timings.forEach((timing) => {
         const timeoutId = setTimeout(() => {
           setBorderColor("blue");
-          setInputReceived(false); // 新しい画像が表示された時にリセット
-          // ランダムに画像を選択
+          setInputReceived(false);
           const randomImage = images[Math.floor(Math.random() * images.length)];
           setImageSrc(randomImage);
 
@@ -34,14 +43,14 @@ function App() {
           const startTime = performance.now();
           const animationId = requestAnimationFrame(function animate(time) {
             const progress = (time - startTime) / 1000;
-            setCircleSize(progress * 100);
+            setCircleSize(progress * selectedSize);
 
             if (progress < 1) {
               requestAnimationFrame(animate);
             } else {
               setTimeout(() => {
                 setIsCircleVisible(false);
-              }, 2000);
+              }, 1800);
             }
           });
 
@@ -57,69 +66,113 @@ function App() {
         timeouts.forEach((timeoutId) => clearTimeout(timeoutId));
       };
     }
-  }, [isStarted]);
+  }, [isStarted, selectedSize]);
 
-  // キー押下を検知し、条件に応じてポイントを加算
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isCircleVisible && !inputReceived) {
-        if (event.key === "ArrowRight" && imageSrc === "right.png") {
-          // ポイント加算
-          setPoints((prevPoints) => prevPoints + 1);
-          setBorderColor("red");
-          setInputReceived(true); // 入力が受け付けられたことを記録
-        } else if (event.key === "ArrowDown" && imageSrc === "bottom.png") {
-          // 下キーが押された場合の処理
-          setPoints((prevPoints) => prevPoints + 1);
-          setBorderColor("red");
-          setInputReceived(true);
-        } else if (event.key === "ArrowLeft" && imageSrc === "left.png") {
-          // 左キーが押された場合の処理
+        if (
+          (event.key === "ArrowRight" && imageSrc === "right.png") ||
+          (event.key === "ArrowDown" && imageSrc === "bottom.png") ||
+          (event.key === "ArrowLeft" && imageSrc === "left.png") ||
+          (event.key === "ArrowUp" && imageSrc === "top.png")
+        ) {
           setPoints((prevPoints) => prevPoints + 1);
           setBorderColor("red");
           setInputReceived(true);
-        } else if (event.key === "ArrowUp" && imageSrc === "top.png") {
-          // 上キーが押された場合の処理
-          setPoints((prevPoints) => prevPoints + 1);
-          setBorderColor("red");
-          setInputReceived(true);
+
+          // 背景変更ロジック
+          if (points + 1 === 3 && !backgroundChanged) {
+            setBackgroundChanged(true);
+          }
+
+          setTimeout(() => {
+            setBorderColor("blue");
+          }, 1000);
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
 
-    // クリーンアップ
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [imageSrc, isCircleVisible, inputReceived]);
+  }, [imageSrc, isCircleVisible, inputReceived, points, backgroundChanged]);
 
   return (
-    <>
-      <button
-        onClick={handleStart}
-        className="mb-4 bg-blue-500 text-white p-2 rounded"
+    <div
+      className="flex flex-col items-center justify-center min-h-screen text-white"
+      style={{
+        background: backgroundChanged
+          ? "none"
+          : "linear-gradient(to bottom right, #48c6ef, #6f86d6)",
+      }}
+    >
+      {backgroundChanged && (
+        <video
+          autoPlay
+          loop
+          muted
+          className="absolute inset-0 object-cover w-full h-full"
+        >
+          <source src="background.mp4" type="video/mp4" />
+        </video>
+      )}
+      <audio ref={audioRef} src="song.mp3" />
+      <div
+        className="relative flex items-center justify-center z-10"
+        style={{
+          width: `${selectedSize}px`,
+          height: `${selectedSize}px`,
+        }}
       >
-        Start
-      </button>
-      <div className="relative w-32 h-32">
         <div
-          className={`absolute inset-0 border-4 border-${borderColor}-500 rounded-full`}
+          className={`absolute inset-0 border-4 rounded-full flex items-center justify-center border-${borderColor}-500`}
+          style={{
+            width: `${selectedSize}px`,
+            height: `${selectedSize}px`,
+          }}
         >
           {isCircleVisible && (
             <img
               src={imageSrc}
+              alt="direction"
               style={{
-                transform: `scale(${circleSize / 100})`,
+                width: `${selectedSize * 0.9}px`,
+                height: `${selectedSize * 0.9}px`,
+                transform: `scale(${circleSize / selectedSize})`,
                 transition: "transform 1s linear",
               }}
             />
           )}
         </div>
       </div>
-      <div className="mt-4">Points: {points}</div>
-    </>
+      <div className="my-8 text-3xl font-bold z-10">Points: {points}</div>
+      <div className="flex items-center space-x-4 mt-8 z-10">
+        <select
+          onChange={(e) => setSelectedSize(Number(e.target.value))}
+          className="bg-gray-800 text-white p-2 rounded-lg"
+        >
+          <option value={100}>視力1.0</option>
+          <option value={120}>視力0.9</option>
+          <option value={140}>視力0.8</option>
+          <option value={160}>視力0.7</option>
+          <option value={180}>視力0.6</option>
+          <option value={200}>視力0.5</option>
+          <option value={220}>視力0.4</option>
+          <option value={240}>視力0.3</option>
+          <option value={260}>視力0.2</option>
+          <option value={280}>視力0.1</option>
+        </select>
+        <button
+          onClick={handleStart}
+          className="bg-green-500 text-white py-2 px-6 rounded-lg shadow-lg transition-transform transform hover:scale-105"
+        >
+          Start Game
+        </button>
+      </div>
+    </div>
   );
 }
 
